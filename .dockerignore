@@ -1,0 +1,27 @@
+# Git version control files
+.git
+.gitignore
+
+# IDE and OS specific files
+.idea/
+.vscode/
+*.iml
+.DS_Store
+
+# Local environment files - NEVER include these in an image
+.env
+*.env.local
+
+# Go module cache and build files
+vendor/
+*.exe
+*.out
+
+# Docker specific files
+Dockerfile
+docker-compose.yml
+
+# Documentation and temporary files
+README.md
+*.md
+*.log
