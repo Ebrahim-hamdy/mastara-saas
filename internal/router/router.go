@@ -3,19 +3,20 @@ package router
 
 import (
 	"context"
-	"net/http"
 	"time"
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/database"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/security"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/middleware" // <-- Import new middleware
 	iamHttp "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/delivery/http"
+	patientHttp "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient/delivery/http"
 	"github.com/Ebrahim-hamdy/mastara-saas/pkg/apierror" // <-- Import new apierror
+
 	"github.com/gin-gonic/gin"
 )
 
 // New creates and returns a new Gin engine with all the application routes configured.
-func New(dbProvider *database.Provider, tokenManager *security.PasetoManager, iamHandler *iamHttp.Handler) *gin.Engine {
+func New(dbProvider *database.Provider, tokenManager *security.PasetoManager, iamHandler *iamHttp.Handler, patientHandler *patientHttp.Handler) *gin.Engine {
 	router := gin.New()
 
 	router.Use(gin.Recovery())
@@ -25,25 +26,38 @@ func New(dbProvider *database.Provider, tokenManager *security.PasetoManager, ia
 	// Health check handler now uses our centralized error handler.
 	router.GET("/health", middleware.ErrorHandler(healthCheckHandler(dbProvider)))
 
+	// === PUBLIC ROUTES (NO AUTH) ===
+	public := router.Group("/public")
+	if iamHandler != nil {
+		iamHandler.RegisterPublicRoutes(public)
+	}
+
+	// Public patient/booking routes will be registered here later.
+
+	// === AUTHENTICATED STAFF ROUTES ===
 	v1 := router.Group("/api/v1")
 	v1.Use(middleware.Authenticator(tokenManager))
 	{
-		iamHandler.RegisterRoutes(v1)
 
 		// Example of a protected route
-		v1.GET("/me", func(c *gin.Context) {
-			payload := middleware.GetAuthPayload(c.Request.Context())
-			if payload == nil {
-				// This should technically be unreachable if middleware is working
-				err := apierror.NewUnauthorized("Not authenticated", nil)
-				c.AbortWithStatusJSON(err.StatusCode, gin.H{"error": err.PublicMessage})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{"data": payload})
-		})
+		// v1.GET("/me", func(c *gin.Context) {
+		// 	payload := middleware.GetAuthPayload(c.Request.Context())
+		// 	if payload == nil {
+		// 		// This should technically be unreachable if middleware is working
+		// 		err := apierror.NewUnauthorized("Not authenticated", nil)
+		// 		c.AbortWithStatusJSON(err.StatusCode, gin.H{"error": err.PublicMessage})
+		// 		return
+		// 	}
+		// 	c.JSON(http.StatusOK, gin.H{"data": payload})
+		// })
 
-		// In Stage 1, we will register module routes here:
-		// iam.RegisterRoutes(v1, dbProvider.Pool)
+		// Register routes for each module.
+		if iamHandler != nil {
+			iamHandler.RegisterProtectedRoutes(v1)
+		}
+		if patientHandler != nil {
+			patientHandler.RegisterRoutes(v1)
+		}
 	}
 
 	return router

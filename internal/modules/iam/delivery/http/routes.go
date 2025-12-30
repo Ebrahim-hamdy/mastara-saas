@@ -5,15 +5,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// RegisterRoutes sets up the routes for the IAM module.
-func (h *Handler) RegisterRoutes(router *gin.RouterGroup) {
-	// These routes are grouped under a path like /api/v1
-	// The Authenticator middleware is applied to this group by the main router.
+// RegisterPublicRoutes sets up the public-facing routes for the IAM module (e.g., login).
+func (h *Handler) RegisterPublicRoutes(router *gin.RouterGroup) {
 	authGroup := router.Group("/auth")
 	{
-		// Note: Login and Register are conceptually "auth" actions, but registration
-		// is performed by an already authenticated admin user in our current flow.
-		authGroup.POST("/register", middleware.ErrorHandler(h.RegisterUser))
-		authGroup.POST("/login", middleware.ErrorHandler(h.LoginUser))
+		authGroup.POST("/login", middleware.ErrorHandler(h.LoginEmployee))
+		// The "Accept Invite" and "Set Password" routes would also be public.
+		// authGroup.POST("/accept-invite", middleware.ErrorHandler(h.AcceptInvite))
+	}
+}
+
+// RegisterProtectedRoutes sets up the protected, staff-only routes for the IAM module.
+func (h *Handler) RegisterProtectedRoutes(router *gin.RouterGroup) {
+	// All routes in this group are protected by the Authenticator middleware.
+	employeesGroup := router.Group("/employees")
+	{
+		// POST /api/v1/employees/invite - Invite a new staff member.
+		employeesGroup.POST("/invite", middleware.ErrorHandler(h.InviteEmployee))
+		// Other employee management routes (GET /, GET /:id, PUT /:id) would go here.
 	}
 }

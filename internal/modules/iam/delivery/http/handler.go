@@ -4,11 +4,13 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/middleware"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/delivery/http/dto"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/model"
 	"github.com/Ebrahim-hamdy/mastara-saas/pkg/apierror"
-	"github.com/Ebrahim-hamdy/mastara-saas/pkg/httpjson"
+	z "github.com/Oudwins/zog"
+	"github.com/Oudwins/zog/zhttp"
 	"github.com/gin-gonic/gin"
 )
 
@@ -22,32 +24,29 @@ func NewHandler(service iam.Service) *Handler {
 	return &Handler{service: service}
 }
 
-// RegisterUser handles the HTTP request for creating a new user.
-func (h *Handler) RegisterUser(c *gin.Context) *apierror.APIError {
-	// 1. Decode and validate the request body into our DTO.
-	req, apiErr := httpjson.DecodeJSON[dto.RegisterRequest](c.Writer, c.Request)
-	if apiErr != nil {
-		return apiErr
+// InviteEmployee handles the HTTP request for inviting a new staff member.
+func (h *Handler) InviteEmployee(c *gin.Context) *apierror.APIError {
+	inviterPayload, err := middleware.GetAuthPayload(c.Request.Context())
+	if err != nil {
+		// This indicates a server configuration error, as this handler should only be
+		// reached if the authenticator middleware has already run successfully.
+		return apierror.NewInternalServer(err)
+	}
+	var req dto.InviteEmployeeRequest
+	if issues := inviteEmployeeSchema.Parse(zhttp.Request(c.Request), &req); issues != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"validation_errors": z.Issues.Flatten(issues)})
+		return nil
 	}
 
-	// Basic semantic validation
-	if req.Email == nil && req.PhoneNumber == nil {
-		return apierror.NewBadRequest("Either email or phone_number must be provided.", nil)
-	}
-
-	// 2. Map the DTO to the service layer's request struct.
-	serviceReq := iam.RegisterUserRequest{
+	serviceReq := iam.InviteEmployeeRequest{
 		FullName:    req.FullName,
 		Email:       req.Email,
 		PhoneNumber: req.PhoneNumber,
-		Password:    req.Password,
 		JobTitle:    req.JobTitle,
 	}
 
-	// 3. Call the business logic service.
-	user, err := h.service.RegisterUser(c.Request.Context(), serviceReq)
+	employee, err := h.service.InviteEmployee(c.Request.Context(), inviterPayload.ClinicID, inviterPayload.UserID, serviceReq)
 	if err != nil {
-		// The service layer returns an APIError, so we can just pass it up.
 		var apiErr *apierror.APIError
 		if errors.As(err, &apiErr) {
 			return apiErr
@@ -55,29 +54,25 @@ func (h *Handler) RegisterUser(c *gin.Context) *apierror.APIError {
 		return apierror.NewInternalServer(err)
 	}
 
-	// 4. Map the domain model to our public response DTO and send.
-	c.JSON(http.StatusCreated, toUserResponse(user))
+	c.JSON(http.StatusCreated, toEmployeeResponse(employee))
 	return nil
 }
 
-// LoginUser handles the HTTP request for user authentication.
-func (h *Handler) LoginUser(c *gin.Context) *apierror.APIError {
-	req, apiErr := httpjson.DecodeJSON[dto.LoginRequest](c.Writer, c.Request)
-	if apiErr != nil {
-		return apiErr
+// LoginEmployee handles the HTTP request for staff authentication.
+func (h *Handler) LoginEmployee(c *gin.Context) *apierror.APIError {
+	var req dto.LoginRequest
+	if issues := loginRequestSchema.Parse(zhttp.Request(c.Request), &req); issues != nil {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"validation_errors": z.Issues.Flatten(issues)})
+		return nil
 	}
 
-	if req.Email == nil && req.Phone == nil {
-		return apierror.NewBadRequest("Either email or phone_number must be provided.", nil)
-	}
-
-	serviceReq := iam.LoginUserRequest{
+	serviceReq := iam.LoginEmployeeRequest{
 		Email:    req.Email,
 		Phone:    req.Phone,
 		Password: req.Password,
 	}
 
-	token, user, err := h.service.LoginUser(c.Request.Context(), serviceReq)
+	token, employee, err := h.service.LoginEmployee(c.Request.Context(), serviceReq)
 	if err != nil {
 		var apiErr *apierror.APIError
 		if errors.As(err, &apiErr) {
@@ -87,23 +82,23 @@ func (h *Handler) LoginUser(c *gin.Context) *apierror.APIError {
 	}
 
 	response := dto.LoginResponse{
-		Token: token,
-		User:  toUserResponse(user),
+		Token:    token,
+		Employee: toEmployeeResponse(employee),
 	}
 
 	c.JSON(http.StatusOK, response)
 	return nil
 }
 
-// toUserResponse is a helper function to map the internal user model to the public DTO.
-func toUserResponse(user *model.User) dto.UserResponse {
-	return dto.UserResponse{
-		ID:       user.ID,
-		ClinicID: user.ClinicID,
-		Email:    user.Email,
-		Phone:    user.PhoneNumber,
-		FullName: user.FullName,
-		JobTitle: user.JobTitle,
-		Status:   user.Status,
+// toEmployeeResponse maps the internal employee and its nested profile to the public DTO.
+func toEmployeeResponse(employee *model.Employee) dto.EmployeeResponse {
+	return dto.EmployeeResponse{
+		ID:          employee.ProfileID,
+		ClinicID:    employee.ClinicID,
+		Email:       employee.Profile.Email,
+		PhoneNumber: employee.Profile.PhoneNumber,
+		FullName:    employee.Profile.FullName,
+		JobTitle:    employee.JobTitle,
+		Status:      string(employee.Status),
 	}
 }

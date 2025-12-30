@@ -50,6 +50,8 @@ CREATE TABLE appointments (
     service_id UUID REFERENCES services(id) ON DELETE SET NULL,
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
+    guest_management_token VARCHAR(255) UNIQUE,
+    guest_management_token_expires_at TIMESTAMPTZ,
     status VARCHAR(50) NOT NULL DEFAULT 'SCHEDULED',
     notes TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

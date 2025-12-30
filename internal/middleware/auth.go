@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/security"
@@ -13,7 +14,11 @@ import (
 // This prevents collisions with other packages.
 type contextKey string
 
-const authPayloadKey = contextKey("auth_payload")
+const (
+	authPayloadKey = contextKey("auth_payload")
+	// Error message constant
+	ErrAuthPayloadNotFoundMsg = "auth payload not found in context"
+)
 
 // Authenticator is a middleware that verifies the authentication token and injects
 // the security context (AuthPayload) into the request.
@@ -51,10 +56,10 @@ func Authenticator(tokenManager *security.PasetoManager) gin.HandlerFunc {
 
 // GetAuthPayload retrieves the authenticated user's payload from the context.
 // It returns nil if the payload is not present.
-func GetAuthPayload(ctx context.Context) *security.AuthPayload {
+func GetAuthPayload(ctx context.Context) (*security.AuthPayload, error) {
 	payload, ok := ctx.Value(authPayloadKey).(*security.AuthPayload)
-	if !ok {
-		return nil
+	if !ok || payload == nil {
+		return nil, errors.New(ErrAuthPayloadNotFoundMsg)
 	}
-	return payload
+	return payload, nil
 }

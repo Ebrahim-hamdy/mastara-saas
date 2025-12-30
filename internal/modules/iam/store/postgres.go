@@ -34,14 +34,14 @@ func IsUniqueViolationError(err error) bool {
 }
 
 // CreateUser inserts a new user record into the database.
-func (r *pgxRepository) CreateUser(ctx context.Context, user *model.User) error {
+func (r *pgxRepository) CreateUser(ctx context.Context, user *model.Employee) error {
 	query := `
         INSERT INTO users (id, clinic_id, email, phone_number, password_hash, full_name, job_title, status, invited_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `
 	_, err := r.db.Exec(ctx, query,
-		user.ID, user.ClinicID, user.Email, user.PhoneNumber, user.PasswordHash,
-		user.FullName, user.JobTitle, user.Status, user.InvitedByID,
+		user.ProfileID, user.ClinicID, user.Profile.Email, user.Profile.PhoneNumber, user.PasswordHash,
+		user.Profile.FullName, user.JobTitle, user.Status, user.InvitedByID,
 	)
 	if err != nil {
 		return fmt.Errorf("store.CreateUser: failed to execute query: %w", err)
@@ -50,17 +50,17 @@ func (r *pgxRepository) CreateUser(ctx context.Context, user *model.User) error 
 }
 
 // FindUserByEmail finds a user by their email within the specified clinic.
-func (r *pgxRepository) FindUserByEmail(ctx context.Context, clinicID uuid.UUID, email string) (*model.User, error) {
-	user := &model.User{}
+func (r *pgxRepository) FindEmployeeByEmail(ctx context.Context, clinicID uuid.UUID, email string) (*model.Employee, error) {
+	employee := &model.Employee{}
 	query := `
         SELECT id, clinic_id, email, phone_number, password_hash, full_name, job_title, status, last_login_at, invited_by, created_at, updated_at, deleted_at
         FROM users
         WHERE clinic_id = $1 AND email = $2 AND deleted_at IS NULL
     `
 	err := r.db.QueryRow(ctx, query, clinicID, email).Scan(
-		&user.ID, &user.ClinicID, &user.Email, &user.PhoneNumber, &user.PasswordHash,
-		&user.FullName, &user.JobTitle, &user.Status, &user.LastLoginAt, &user.InvitedByID,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+		&employee.ProfileID, &employee.ClinicID, &employee.Profile.Email, &employee.Profile.PhoneNumber, &employee.PasswordHash,
+		&employee.Profile.FullName, &employee.JobTitle, &employee.Status, &employee.LastLoginAt, &employee.InvitedByID,
+		&employee.CreatedAt, &employee.UpdatedAt, &employee.Profile.DeletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -68,21 +68,21 @@ func (r *pgxRepository) FindUserByEmail(ctx context.Context, clinicID uuid.UUID,
 		}
 		return nil, fmt.Errorf("store.FindUserByEmail: failed to query user: %w", err)
 	}
-	return user, nil
+	return employee, nil
 }
 
 // FindUserByPhone finds a user by their phone number within the specified clinic.
-func (r *pgxRepository) FindUserByPhone(ctx context.Context, clinicID uuid.UUID, phone string) (*model.User, error) {
-	user := &model.User{}
+func (r *pgxRepository) FindUserByPhone(ctx context.Context, clinicID uuid.UUID, phone string) (*model.Employee, error) {
+	employee := &model.Employee{}
 	query := `
         SELECT id, clinic_id, email, phone_number, password_hash, full_name, job_title, status, last_login_at, invited_by, created_at, updated_at, deleted_at
         FROM users
         WHERE clinic_id = $1 AND phone_number = $2 AND deleted_at IS NULL
     `
 	err := r.db.QueryRow(ctx, query, clinicID, phone).Scan(
-		&user.ID, &user.ClinicID, &user.Email, &user.PhoneNumber, &user.PasswordHash,
-		&user.FullName, &user.JobTitle, &user.Status, &user.LastLoginAt, &user.InvitedByID,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+		&employee.ProfileID, &employee.ClinicID, &employee.Profile.Email, &employee.Profile.PhoneNumber, &employee.PasswordHash,
+		&employee.Profile.FullName, &employee.JobTitle, &employee.Status, &employee.LastLoginAt, &employee.InvitedByID,
+		&employee.CreatedAt, &employee.UpdatedAt, &employee.Profile.DeletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -90,21 +90,21 @@ func (r *pgxRepository) FindUserByPhone(ctx context.Context, clinicID uuid.UUID,
 		}
 		return nil, fmt.Errorf("store.FindUserByPhone: failed to query user: %w", err)
 	}
-	return user, nil
+	return employee, nil
 }
 
 // FindUserByID finds a user by their ID within the specified clinic.
-func (r *pgxRepository) FindUserByID(ctx context.Context, clinicID uuid.UUID, id uuid.UUID) (*model.User, error) {
-	user := &model.User{}
+func (r *pgxRepository) FindUserByID(ctx context.Context, clinicID uuid.UUID, id uuid.UUID) (*model.Employee, error) {
+	employee := &model.Employee{}
 	query := `
         SELECT id, clinic_id, email, phone_number, password_hash, full_name, job_title, status, last_login_at, invited_by, created_at, updated_at, deleted_at
         FROM users
         WHERE clinic_id = $1 AND id = $2 AND deleted_at IS NULL
     `
 	err := r.db.QueryRow(ctx, query, clinicID, id).Scan(
-		&user.ID, &user.ClinicID, &user.Email, &user.PhoneNumber, &user.PasswordHash,
-		&user.FullName, &user.JobTitle, &user.Status, &user.LastLoginAt, &user.InvitedByID,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+		&employee.ProfileID, &employee.ClinicID, &employee.Profile.Email, &employee.Profile.PhoneNumber, &employee.PasswordHash,
+		&employee.Profile.FullName, &employee.JobTitle, &employee.Status, &employee.LastLoginAt, &employee.InvitedByID,
+		&employee.CreatedAt, &employee.UpdatedAt, &employee.Profile.DeletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -112,7 +112,7 @@ func (r *pgxRepository) FindUserByID(ctx context.Context, clinicID uuid.UUID, id
 		}
 		return nil, fmt.Errorf("store.FindUserByID: failed to query user: %w", err)
 	}
-	return user, nil
+	return employee, nil
 }
 
 // FindRolesForUser retrieves all roles (and their permissions) assigned to a user.

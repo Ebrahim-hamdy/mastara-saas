@@ -15,9 +15,14 @@ import (
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/database"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/logger"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/security"
-	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam"
-	iamHttp "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/delivery/http"
-	iamStore "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/store"
+
+	// "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam"
+	// iamHttp "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/delivery/http"
+	// iamStore "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/store"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient"
+	patientHttp "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient/delivery/http"
+	patientStore "github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient/store"
+
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/router"
 	"github.com/joho/godotenv"
 	"github.com/rs/zerolog/log"
@@ -53,13 +58,20 @@ func main() {
 	}
 	log.Info().Msg("Security provider initialized.")
 
-	iamRepo := iamStore.NewPgxRepository(dbProvider.Pool)
-	iamSvc := iam.NewService(iamRepo, tokenManager, appConfig)
-	iamHandler := iamHttp.NewHandler(iamSvc)
-	log.Info().Msg("IAM module initialized.")
+	// 4. Initialize Modules
+	// iamRepo := iamStore.NewPgxRepository(dbProvider.Pool)
+	// iamSvc := iam.NewService(iamRepo, tokenManager, appConfig)
+	// iamHandler := iamHttp.NewHandler(iamSvc)
+	// log.Info().Msg("IAM module initialized.")
+
+	// Patient
+	patientRepo := patientStore.NewPgxProfileRepository(dbProvider.Pool)
+	patientSvc := patient.NewService(patientRepo)
+	patientHandler := patientHttp.NewHandler(patientSvc)
+	log.Info().Msg("Patient module initialized.")
 
 	// 4. Setup router with injected dependencies.
-	engine := router.New(dbProvider, tokenManager, iamHandler)
+	engine := router.New(dbProvider, tokenManager, nil, patientHandler)
 	log.Info().Msg("Router initialized.")
 
 	// 5. Create and configure the HTTP server.
