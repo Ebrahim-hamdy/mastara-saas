@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/gofrs/uuid"
+import "github.com/google/uuid"
 
 // EmployeeResponse defines the publicly exposed fields of an employee.
 // It combines data from both the 'profiles' and 'employees' tables.

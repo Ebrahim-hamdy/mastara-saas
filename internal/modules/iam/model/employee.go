@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/security"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 type EmployeeStatus string

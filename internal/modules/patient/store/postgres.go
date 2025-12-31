@@ -7,12 +7,21 @@ import (
 	"fmt"
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient/model"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/shared/database"
 	"github.com/Ebrahim-hamdy/mastara-saas/pkg/apierror"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// Querier defines the common methods between pgx.Tx and *pgxpool.Pool.
+// This allows repository methods to be used both within and outside of transactions.
+type Querier interface {
+	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
 
 // pgxProfileRepository is the PostgreSQL implementation of the patient.Repository.
 type pgxProfileRepository struct {
@@ -25,17 +34,16 @@ func NewPgxProfileRepository(db *pgxpool.Pool) *pgxProfileRepository {
 }
 
 // Create inserts a new profile record into the database.
-func (r *pgxProfileRepository) Create(ctx context.Context, profile *model.Profile) error {
+func (r *pgxProfileRepository) Create(ctx context.Context, querier database.Querier, profile *model.Profile) error {
 	query := `
         INSERT INTO profiles (id, clinic_id, full_name, phone_number, email, national_id, date_of_birth, profile_status, extended_data)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `
-	_, err := r.db.Exec(ctx, query,
+	_, err := querier.Exec(ctx, query,
 		profile.ID, profile.ClinicID, profile.FullName, profile.PhoneNumber, profile.Email,
 		profile.NationalID, profile.DateOfBirth, profile.ProfileStatus, profile.ExtendedData,
 	)
 	if err != nil {
-		// Check for unique constraint violation on phone or email
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return apierror.NewBadRequest("A patient with this phone number or email already exists in this clinic.", err)
@@ -48,7 +56,7 @@ func (r *pgxProfileRepository) Create(ctx context.Context, profile *model.Profil
 // FindOrCreateGuest atomically finds a profile by phone number for a given clinic,
 // or creates a new 'GUEST' profile if one does not exist. This is implemented
 // using a CTE with ON CONFLICT to ensure it is a single, race-condition-safe operation.
-func (r *pgxProfileRepository) FindOrCreateGuestForBooking(ctx context.Context, clinicID uuid.UUID, fullName string, phoneNumber string) (*model.Profile, error) {
+func (r *pgxProfileRepository) FindOrCreateGuestForBooking(ctx context.Context, querier database.Querier, clinicID uuid.UUID, fullName string, phoneNumber string) (*model.Profile, error) {
 	profile := &model.Profile{}
 
 	// This query is the heart of the "Smart Upsert" logic.
@@ -88,7 +96,7 @@ func (r *pgxProfileRepository) FindOrCreateGuestForBooking(ctx context.Context, 
 }
 
 // FindByID finds a profile by its ID, scoped to the given clinic.
-func (r *pgxProfileRepository) FindByID(ctx context.Context, clinicID, profileID uuid.UUID) (*model.Profile, error) {
+func (r *pgxProfileRepository) FindByID(ctx context.Context, querier database.Querier, clinicID, profileID uuid.UUID) (*model.Profile, error) {
 	profile := &model.Profile{}
 	query := `
         SELECT id, clinic_id, full_name, phone_number, email, national_id, date_of_birth, profile_status, extended_data, created_at, updated_at, deleted_at
@@ -110,17 +118,18 @@ func (r *pgxProfileRepository) FindByID(ctx context.Context, clinicID, profileID
 }
 
 // Update persists changes to a profile record.
-func (r *pgxProfileRepository) Update(ctx context.Context, profile *model.Profile) error {
+func (r *pgxProfileRepository) Update(ctx context.Context, querier database.Querier, profile *model.Profile) error {
 	query := `
         UPDATE profiles
         SET full_name = $1, phone_number = $2, email = $3, national_id = $4, date_of_birth = $5, profile_status = $6, extended_data = $7
         WHERE id = $8 AND clinic_id = $9
     `
-	cmdTag, err := r.db.Exec(ctx, query,
+	cmdTag, err := querier.Exec(ctx, query,
 		profile.FullName, profile.PhoneNumber, profile.Email, profile.NationalID,
 		profile.DateOfBirth, profile.ProfileStatus, profile.ExtendedData,
 		profile.ID, profile.ClinicID,
 	)
+
 	if err != nil {
 		return fmt.Errorf("store.Update: failed to execute update: %w", err)
 	}
@@ -130,7 +139,7 @@ func (r *pgxProfileRepository) Update(ctx context.Context, profile *model.Profil
 	return nil
 }
 
-func (r *pgxProfileRepository) List(ctx context.Context, clinicID uuid.UUID, offset, limit int) ([]model.Profile, error) {
+func (r *pgxProfileRepository) List(ctx context.Context, querier database.Querier, clinicID uuid.UUID, offset, limit int) ([]model.Profile, error) {
 	var profiles []model.Profile
 	query := `
         SELECT id, clinic_id, full_name, phone_number, email, national_id, date_of_birth, profile_status, extended_data, created_at, updated_at, deleted_at

@@ -6,7 +6,7 @@ import (
 
 	"aidanwoods.dev/go-paseto"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/config"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 // AuthPayload contains the data embedded within an authentication token.
@@ -103,7 +103,7 @@ func (m *PasetoManager) VerifyToken(tokenString string) (*AuthPayload, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get token jti: %w", err)
 	}
-	if payload.TokenID, err = uuid.FromString(jtiStr); err != nil {
+	if payload.TokenID, err = uuid.Parse(jtiStr); err != nil {
 		return nil, fmt.Errorf("invalid jti in token: %w", err)
 	}
 
@@ -121,7 +121,7 @@ func (m *PasetoManager) VerifyToken(tokenString string) (*AuthPayload, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user id from token: %w", err)
 	}
-	if payload.UserID, err = uuid.FromString(userIDStr); err != nil {
+	if payload.UserID, err = uuid.Parse(userIDStr); err != nil {
 		return nil, fmt.Errorf("invalid user id in token: %w", err)
 	}
 
@@ -129,7 +129,7 @@ func (m *PasetoManager) VerifyToken(tokenString string) (*AuthPayload, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get clinic id from token: %w", err)
 	}
-	if payload.ClinicID, err = uuid.FromString(clinicIDStr); err != nil {
+	if payload.ClinicID, err = uuid.Parse(clinicIDStr); err != nil {
 		return nil, fmt.Errorf("invalid clinic id in token: %w", err)
 	}
 

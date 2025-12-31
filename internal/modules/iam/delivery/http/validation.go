@@ -28,7 +28,7 @@ var loginRequestSchema = z.Struct(z.Shape{
 
 // Schema for inviting a new employee.
 var inviteEmployeeSchema = z.Struct(z.Shape{
-	"full_name":    z.String().Min(2, z.Message("Full name must be at least 2 characters.")),
+	"full_name":    z.String().Min(4, z.Message("Full name must be at least 4 characters.")),
 	"email":        z.String().Email(z.Message("A valid email address is required.")).Optional(),
 	"phone_number": z.String().Match(e164Regex, z.Message("A valid E.164 phone number is required.")).Optional(),
 	"job_title":    z.String().Optional(),

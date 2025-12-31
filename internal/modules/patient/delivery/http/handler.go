@@ -13,7 +13,7 @@ import (
 	z "github.com/Oudwins/zog"
 	"github.com/Oudwins/zog/zhttp"
 	"github.com/gin-gonic/gin"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 type Handler struct {
@@ -46,7 +46,7 @@ func (h *Handler) RegisterPatient(c *gin.Context) *apierror.APIError {
 		DateOfBirth: req.DateOfBirth,
 	}
 
-	profile, err := h.service.RegisterNewPatient(c.Request.Context(), serviceReq)
+	profile, err := h.service.RegisterNewPatient(c.Request.Context(), payload.ClinicID, serviceReq)
 	if err != nil {
 		var apiErr *apierror.APIError
 		if errors.As(err, &apiErr) {
@@ -66,7 +66,7 @@ func (h *Handler) CompleteGuestProfile(c *gin.Context) *apierror.APIError {
 		return apierror.NewInternalServer(err)
 	}
 
-	profileID, err := uuid.FromString(c.Param("id"))
+	profileID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apierror.NewBadRequest("Invalid profile ID format.", err)
 	}
@@ -86,7 +86,7 @@ func (h *Handler) CompleteGuestProfile(c *gin.Context) *apierror.APIError {
 		DateOfBirth: req.DateOfBirth,
 	}
 
-	profile, err := h.service.CompleteGuestRegistration(c.Request.Context(), serviceReq)
+	profile, err := h.service.CompleteGuestRegistration(c.Request.Context(), payload.ClinicID, serviceReq)
 	if err != nil {
 		var apiErr *apierror.APIError
 		if errors.As(err, &apiErr) {
@@ -106,7 +106,7 @@ func (h *Handler) GetPatient(c *gin.Context) *apierror.APIError {
 		return apierror.NewInternalServer(err)
 	}
 
-	profileID, err := uuid.FromString(c.Param("id"))
+	profileID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		return apierror.NewBadRequest("Invalid profile ID format.", err)
 	}

@@ -4,8 +4,9 @@ go 1.24.11
 
 require (
 	aidanwoods.dev/go-paseto v1.6.0
+	github.com/Oudwins/zog v0.22.0
 	github.com/gin-gonic/gin v1.11.0
-	github.com/gofrs/uuid v4.4.0+incompatible
+	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/joho/godotenv v1.5.1
 	github.com/rs/zerolog v1.34.0
@@ -15,7 +16,6 @@ require (
 
 require (
 	aidanwoods.dev/go-result v0.3.1 // indirect
-	github.com/Oudwins/zog v0.22.0 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect

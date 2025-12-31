@@ -3,7 +3,7 @@ package dto
 import (
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 // ProfileResponse defines the publicly exposed fields of a patient profile.

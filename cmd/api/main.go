@@ -58,15 +58,17 @@ func main() {
 	}
 	log.Info().Msg("Security provider initialized.")
 
+	txManager := database.NewTxManager(dbProvider.Pool)
+	log.Info().Msg("Transaction manager initialized.")
+
 	// 4. Initialize Modules
 	// iamRepo := iamStore.NewPgxRepository(dbProvider.Pool)
 	// iamSvc := iam.NewService(iamRepo, tokenManager, appConfig)
 	// iamHandler := iamHttp.NewHandler(iamSvc)
 	// log.Info().Msg("IAM module initialized.")
 
-	// Patient
 	patientRepo := patientStore.NewPgxProfileRepository(dbProvider.Pool)
-	patientSvc := patient.NewService(patientRepo)
+	patientSvc := patient.NewService(txManager, patientRepo, dbProvider.Pool)
 	patientHandler := patientHttp.NewHandler(patientSvc)
 	log.Info().Msg("Patient module initialized.")
 

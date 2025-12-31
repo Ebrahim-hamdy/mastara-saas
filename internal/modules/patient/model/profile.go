@@ -4,7 +4,7 @@ package model
 import (
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 // ProfileStatus represents the state of a patient's profile.

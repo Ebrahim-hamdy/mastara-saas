@@ -5,7 +5,8 @@ import (
 	"context"
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/model"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // Service defines the contract for the IAM module's business logic (for employees).
@@ -18,7 +19,7 @@ type Service interface {
 // Repository defines the data access contract for employees.
 type Repository interface {
 	// Creates the profile and employee records in a single transaction.
-	CreateInvitedEmployee(ctx context.Context, profile *model.Profile, employee *model.Employee) error
+	CreateInvitedEmployee(ctx context.Context, tx pgx.Tx, profile *model.Profile, employee *model.Employee) error
 	FindEmployeeByEmail(ctx context.Context, clinicID uuid.UUID, email string) (*model.Employee, error)
 	FindEmployeeByPhone(ctx context.Context, clinicID uuid.UUID, phone string) (*model.Employee, error)
 	FindEmployeeByIDWithDetails(ctx context.Context, clinicID, profileID uuid.UUID) (*model.Employee, error)

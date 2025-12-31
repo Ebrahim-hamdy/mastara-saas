@@ -6,16 +6,23 @@ import (
 	"time"
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient/model"
-	"github.com/gofrs/uuid"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient/store"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/shared/database"
+	"github.com/google/uuid"
 )
+
+// Querier is an alias for the store's Querier interface.
+type Querier interface {
+	store.Querier
+}
 
 // Service defines the contract for the Patient module's business logic.
 type Service interface {
 	// RegisterNewPatient is used by staff to create a fully-registered patient profile at once.
-	RegisterNewPatient(ctx context.Context, req RegisterPatientRequest) (*model.Profile, error)
+	RegisterNewPatient(ctx context.Context, clinicID uuid.UUID, req RegisterPatientRequest) (*model.Profile, error)
 
 	// CompleteGuestRegistration is used by staff to enrich a guest profile with full details.
-	CompleteGuestRegistration(ctx context.Context, req CompleteGuestRequest) (*model.Profile, error)
+	CompleteGuestRegistration(ctx context.Context, clinicID uuid.UUID, req CompleteGuestRequest) (*model.Profile, error)
 
 	// UpdatePatientDetails(ctx context.Context, req CompleteGuestRequest) (*model.Profile, error)
 
@@ -32,12 +39,12 @@ type Service interface {
 type Repository interface {
 	// FindOrCreateGuest atomically finds a profile by phone number or creates a new one if it doesn't exist.
 	// This is the core of the "Guest Checkout" booking flow.
-	FindOrCreateGuestForBooking(ctx context.Context, clinicID uuid.UUID, fullName string, phoneNumber string) (*model.Profile, error)
+	FindOrCreateGuestForBooking(ctx context.Context, querier database.Querier, clinicID uuid.UUID, fullName string, phoneNumber string) (*model.Profile, error)
 
-	FindByID(ctx context.Context, clinicID, profileID uuid.UUID) (*model.Profile, error)
-	Create(ctx context.Context, profile *model.Profile) error
-	Update(ctx context.Context, profile *model.Profile) error
-	List(ctx context.Context, clinicID uuid.UUID, offset, limit int) ([]model.Profile, error)
+	FindByID(ctx context.Context, querier database.Querier, clinicID, profileID uuid.UUID) (*model.Profile, error)
+	Create(ctx context.Context, querier database.Querier, profile *model.Profile) error
+	Update(ctx context.Context, querier database.Querier, profile *model.Profile) error
+	List(ctx context.Context, querier database.Querier, clinicID uuid.UUID, offset, limit int) ([]model.Profile, error)
 }
 
 // RegisterPatientRequest contains all data for creating a new, fully registered patient.

@@ -6,13 +6,17 @@ import (
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/config"
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/infra/security"
-	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/model" // Import the store package
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/iam/model"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/shared/database"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/shared/service"
 	"github.com/Ebrahim-hamdy/mastara-saas/pkg/apierror"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // serviceImpl is the concrete implementation of the iam.Service interface.
 type defaultService struct {
+	service.BaseService
 	repo   Repository
 	sec    *security.PasetoManager
 	config *config.Config
@@ -24,8 +28,13 @@ type defaultService struct {
 }
 
 // NewService creates a new instance of the IAM service.
-func NewService(repo Repository, sec *security.PasetoManager, config *config.Config) Service {
-	return &defaultService{repo, sec, config}
+func NewService(txManager database.TxManager, repo Repository, sec *security.PasetoManager, config *config.Config) Service {
+	return &defaultService{
+		BaseService: service.BaseService{Tx: txManager},
+		repo:        repo,
+		sec:         sec,
+		config:      config,
+	}
 }
 
 // InviteEmployee handles the business logic for creating a new employee in an 'INVITED' state.
@@ -49,14 +58,19 @@ func (s *defaultService) InviteEmployee(ctx context.Context, clinicID, inviterID
 		Profile:     *newProfile, // Embed profile for response mapping
 	}
 
-	if err := s.repo.CreateInvitedEmployee(ctx, newProfile, newEmployee); err != nil {
-		// The repository should handle unique violation checks.
-		return nil, err
+	// Use the transaction helper
+	err := s.RunInTransaction(ctx, func(tx pgx.Tx) error {
+		// The repository methods now need to accept a Querier (tx or pool)
+		return s.repo.CreateInvitedEmployee(ctx, tx, newProfile, newEmployee)
+	})
+
+	if err != nil {
+		return nil, err // Error is already wrapped and transaction is rolled back.
 	}
 
+	newEmployee.Profile = *newProfile
 	// In a real flow, we would now generate an invitation token and send an email/SMS.
 	// For now, creating the record is sufficient.
-
 	return newEmployee, nil
 }
 
@@ -74,7 +88,7 @@ func (s *defaultService) LoginEmployee(ctx context.Context, req LoginEmployeeReq
 	// For now, we will simulate this by requiring the DTO to carry it.
 	// This makes the dependency explicit.
 
-	placeholderClinicID := uuid.Must(uuid.NewV4()) // THIS IS A PLACEHOLDER
+	placeholderClinicID := uuid.Must(uuid.NewV7()) // THIS IS A PLACEHOLDER
 
 	var employee *model.Employee
 	var err error

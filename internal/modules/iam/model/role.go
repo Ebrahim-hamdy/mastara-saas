@@ -3,7 +3,7 @@ package model
 import (
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
 )
 
 // Role represents a collection of permissions.

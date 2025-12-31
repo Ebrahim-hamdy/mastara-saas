@@ -6,68 +6,96 @@ import (
 	"fmt"
 
 	"github.com/Ebrahim-hamdy/mastara-saas/internal/modules/patient/model"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/shared/database"
+	"github.com/Ebrahim-hamdy/mastara-saas/internal/shared/service"
 	"github.com/Ebrahim-hamdy/mastara-saas/pkg/apierror"
-	"github.com/gofrs/uuid"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // defaultService is the concrete implementation of the patient.Service interface.
 type defaultService struct {
+	service.BaseService
 	repo Repository
+	db   *pgxpool.Pool
 }
 
 // NewService creates a new instance of the patient service.
-func NewService(repo Repository) Service {
-	return &defaultService{repo: repo}
+func NewService(txManager database.TxManager, repo Repository, db *pgxpool.Pool) Service {
+	return &defaultService{
+		BaseService: service.BaseService{Tx: txManager},
+		repo:        repo,
+		db:          db,
+	}
 }
 
 // FindOrCreateGuest orchestrates the "Smart Upsert" logic for guest bookings.
 func (s *defaultService) FindOrCreateGuestForBooking(ctx context.Context, clinicID uuid.UUID, fullName string, phoneNumber string) (*model.Profile, error) {
-	if fullName == "" || phoneNumber == "" {
-		return nil, apierror.NewBadRequest("Full name and phone number are required for guest booking.", nil)
-	}
-	// This call is atomic and race-condition-safe thanks to the repository's implementation.
-	profile, err := s.repo.FindOrCreateGuestForBooking(ctx, clinicID, fullName, phoneNumber)
-	if err != nil {
-		return nil, apierror.NewInternalServer(fmt.Errorf("could not find or create guest profile: %w", err))
-	}
-	return profile, nil
+	var profile *model.Profile
+	err := s.RunInTransaction(ctx, func(tx pgx.Tx) error {
+		p, err := s.repo.FindOrCreateGuestForBooking(ctx, tx, clinicID, fullName, phoneNumber)
+		if err != nil {
+			return err
+		}
+		profile = p
+		return nil
+	})
+	return profile, err
 }
 
 // RegisterNewPatient handles the creation of a fully-detailed patient profile by staff.
-func (s *defaultService) RegisterNewPatient(ctx context.Context, req RegisterPatientRequest) (*model.Profile, error) {
-	// This is now much cleaner. We create a guest record first to ensure atomicity and then update it.
-	profile, err := s.repo.FindOrCreateGuestForBooking(ctx, req.ClinicID, req.FullName, req.PhoneNumber)
-	if err != nil {
-		return nil, apierror.NewInternalServer(fmt.Errorf("failed during initial profile creation: %w", err))
-	}
+func (s *defaultService) RegisterNewPatient(ctx context.Context, clinicID uuid.UUID, req RegisterPatientRequest) (*model.Profile, error) {
+	var profile *model.Profile
+	err := s.RunInTransaction(ctx, func(tx pgx.Tx) error {
+		existing, err := s.repo.FindOrCreateGuestForBooking(ctx, tx, clinicID, req.FullName, req.PhoneNumber)
+		if err != nil {
+			return fmt.Errorf("failed during profile lookup: %w", err)
+		}
 
-	if profile.ProfileStatus == model.ProfileStatusRegistered {
-		return nil, apierror.NewBadRequest("A registered patient with this phone number already exists.", nil)
-	}
+		// If the profile is already fully registered, this is a conflict.
+		if existing.ProfileStatus == model.ProfileStatusRegistered {
+			return apierror.NewBadRequest("A registered patient with this phone number already exists.", nil)
+		}
+		profile.ProfileStatus = model.ProfileStatusRegistered
 
-	profile.ProfileStatus = model.ProfileStatusRegistered
-	return s.upsertProfile(ctx, profile, req)
+		updatedProfile, updateErr := s.upsertProfile(ctx, tx, existing, req)
+
+		profile = updatedProfile
+		return updateErr
+	})
+
+	return profile, err
 
 }
 
 // CompleteGuestRegistration transitions a guest profile to a registered state.
-func (s *defaultService) CompleteGuestRegistration(ctx context.Context, req CompleteGuestRequest) (*model.Profile, error) {
-	profile, err := s.repo.FindByID(ctx, req.ClinicID, req.ProfileID)
-	if err != nil {
-		return nil, err // Repository returns a well-typed NotFound error
-	}
+func (s *defaultService) CompleteGuestRegistration(ctx context.Context, clinicID uuid.UUID, req CompleteGuestRequest) (*model.Profile, error) {
+	var profile *model.Profile
+	err := s.RunInTransaction(ctx, func(tx pgx.Tx) error {
+		existing, err := s.repo.FindByID(ctx, s.db, req.ClinicID, req.ProfileID)
+		if err != nil {
+			return err
+		}
 
-	// If a guest is being updated, they become registered.
-	if profile.ProfileStatus == model.ProfileStatusGuest {
-		profile.ProfileStatus = model.ProfileStatusRegistered
-	}
+		// If a guest is being updated, they become registered.
+		if profile.ProfileStatus == model.ProfileStatusGuest {
+			profile.ProfileStatus = model.ProfileStatusRegistered
+		}
 
-	return s.upsertProfile(ctx, profile, req)
+		updatedProfile, updateErr := s.upsertProfile(ctx, tx, existing, req)
+
+		profile = updatedProfile
+		return updateErr
+
+	})
+
+	return profile, err
 }
 
 // GetProfileByID retrieves a single patient profile.
 func (s *defaultService) GetProfileByID(ctx context.Context, clinicID, profileID uuid.UUID) (*model.Profile, error) {
-	profile, err := s.repo.FindByID(ctx, clinicID, profileID)
+	profile, err := s.repo.FindByID(ctx, s.db, clinicID, profileID)
 	if err != nil {
 		// The repository already returns a correctly typed apierror.NotFound
 		return nil, err
@@ -83,17 +111,17 @@ func (s *defaultService) ListProfiles(ctx context.Context, clinicID uuid.UUID, p
 		pageSize = 25
 	}
 	offset := (page - 1) * pageSize
-	return s.repo.List(ctx, clinicID, offset, pageSize)
+	return s.repo.List(ctx, s.db, clinicID, offset, pageSize)
 }
 
-func (s *defaultService) upsertProfile(ctx context.Context, profile *model.Profile, req ProfileUpdater) (*model.Profile, error) {
+func (s *defaultService) upsertProfile(ctx context.Context, tx pgx.Tx, profile *model.Profile, req ProfileUpdater) (*model.Profile, error) {
 	profile.FullName = req.GetFullName()
 	profile.Email = req.GetEmail()
 	profile.NationalID = req.GetNationalID()
 	profile.DateOfBirth = req.GetDateOfBirth()
 
 	// The calling method is responsible for setting the correct status.
-	if err := s.repo.Update(ctx, profile); err != nil {
+	if err := s.repo.Update(ctx, tx, profile); err != nil {
 		return nil, apierror.NewInternalServer(fmt.Errorf("failed to update profile: %w", err))
 	}
 	return profile, nil
