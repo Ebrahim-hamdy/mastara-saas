@@ -18,10 +18,14 @@ CREATE TABLE services (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     deleted_at TIMESTAMPTZ,
-    CONSTRAINT uq_services_clinic_name UNIQUE (clinic_id, name),
+    -- CONSTRAINT uq_services_clinic_name UNIQUE (clinic_id, name),
     CONSTRAINT chk_slot_multiple_positive CHECK (slot_multiple > 0)
 );
 COMMENT ON TABLE services IS 'Defines the clinical procedures offered. Duration is based on a multiple of the clinic''s slot_duration.';
+
+-- === soft-delete aware unique index ===
+CREATE UNIQUE INDEX idx_services_unique_active_name ON services (clinic_id, name) WHERE deleted_at IS NULL;
+
 
 CREATE TABLE doctor_schedules (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
@@ -34,10 +38,15 @@ CREATE TABLE doctor_schedules (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_day_of_week_range CHECK (day_of_week >= 0 AND day_of_week <= 6),
     CONSTRAINT chk_schedule_times CHECK (end_time > start_time),
+    -- EXCLUDE USING GIST (
+    --     doctor_id WITH =,
+    --     day_of_week WITH =,
+    --     timerange(start_time, end_time, '[]') WITH &&
+    -- )
     EXCLUDE USING GIST (
         doctor_id WITH =,
         day_of_week WITH =,
-        timerange(start_time, end_time, '[]') WITH &&
+        tsrange(('2000-01-01'::date + start_time)::timestamp, ('2000-01-01'::date + end_time)::timestamp) WITH &&
     )
 );
 COMMENT ON TABLE doctor_schedules IS 'Stores recurring weekly working hours for doctors (employees).';
@@ -64,6 +73,16 @@ CREATE TABLE appointments (
     )
 );
 COMMENT ON TABLE appointments IS 'Stores all scheduled appointments. Links employees (doctors) to profiles (patients).';
+
+-- Apply the audit trigger to the 'appointments' table to track all booking changes.
+CREATE TRIGGER appointments_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON appointments
+FOR EACH ROW EXECUTE FUNCTION log_change();
+
+-- Apply the audit trigger to the 'services' table to track changes in pricing and offerings.
+CREATE TRIGGER services_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON services
+FOR EACH ROW EXECUTE FUNCTION log_change();
 
 -- Apply timestamp triggers
 CREATE TRIGGER set_timestamp BEFORE UPDATE ON services FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();

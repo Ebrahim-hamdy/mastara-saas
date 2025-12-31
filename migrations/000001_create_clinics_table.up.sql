@@ -4,6 +4,11 @@
 -- Enable the pg_uuidv7 extension to generate time-ordered, sortable UUIDs (our standard for all PKs).
 CREATE EXTENSION IF NOT EXISTS "pg_uuidv7";
 
+-- Enable btree_gist to allow GIST indexes to work with standard data types
+-- in EXCLUDE constraints (e.g., for doctor_id, day_of_week). This is critical.
+CREATE EXTENSION IF NOT EXISTS "btree_gist";
+
+
 CREATE TABLE clinics (
     -- Core Identity
     id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
@@ -11,7 +16,7 @@ CREATE TABLE clinics (
 
     -- Contact Information
     phone_number VARCHAR(50) NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
+    email VARCHAR(255) NOT NULL,
 
     -- Physical Address (Structured for querying and formatting)
     address_line1 TEXT NOT NULL,
@@ -43,6 +48,9 @@ CREATE TABLE clinics (
 COMMENT ON TABLE clinics IS 'Represents a single tenant (a dental clinic) in the SaaS platform.';
 COMMENT ON COLUMN clinics.timezone IS 'The IANA timezone name for the clinic, used for displaying local times.';
 COMMENT ON COLUMN clinics.settings IS 'Flexible JSONB field for clinic-specific settings like logo URL, branding colors, etc.';
+
+-- === HARDENING: Soft-delete aware unique index ===
+CREATE UNIQUE INDEX idx_clinics_unique_active_email ON clinics (email) WHERE deleted_at IS NULL;
 
 -- Create indexes for performance on frequently queried columns.
 CREATE INDEX idx_clinics_name ON clinics(name);

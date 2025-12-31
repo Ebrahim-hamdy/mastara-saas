@@ -1,5 +1,10 @@
 -- This migration safely tears down the unified IAM and Profiles schema in the reverse order of creation.
 
+-- Drop audit components first
+DROP TRIGGER IF EXISTS profiles_audit_trigger ON profiles;
+DROP FUNCTION IF EXISTS log_change();
+DROP TABLE IF EXISTS audit_log;
+
 -- Drop triggers first as they depend on the tables and functions.
 DROP TRIGGER IF EXISTS set_timestamp ON roles;
 DROP TRIGGER IF EXISTS set_timestamp ON employees;

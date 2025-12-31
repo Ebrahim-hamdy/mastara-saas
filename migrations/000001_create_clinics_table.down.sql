@@ -11,3 +11,4 @@ DROP TABLE IF EXISTS clinics;
 
 -- Drop the extension. This is safe as long as no other tables are using it.
 DROP EXTENSION IF EXISTS "pg_uuidv7";
+DROP EXTENSION IF EXISTS "btree_gist";

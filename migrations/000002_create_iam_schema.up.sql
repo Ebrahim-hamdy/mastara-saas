@@ -40,13 +40,16 @@ CREATE TABLE profiles (
     deleted_at TIMESTAMPTZ,
 
     -- A person must have at least one contact method.
-    CONSTRAINT chk_profile_contact_method CHECK (email IS NOT NULL OR phone_number IS NOT NULL),
+    CONSTRAINT chk_profile_contact_method CHECK (email IS NOT NULL OR phone_number IS NOT NULL)
     
     -- Partial unique indexes for optional, tenant-scoped identifiers.
-    CONSTRAINT uq_profiles_clinic_phone UNIQUE (clinic_id, phone_number) WHERE phone_number IS NOT NULL,
-    CONSTRAINT uq_profiles_clinic_email UNIQUE (clinic_id, email) WHERE email IS NOT NULL
+    -- CONSTRAINT uq_profiles_clinic_phone UNIQUE (clinic_id, phone_number) WHERE phone_number IS NOT NULL,
+    -- CONSTRAINT uq_profiles_clinic_email UNIQUE (clinic_id, email) WHERE email IS NOT NULL
 );
 COMMENT ON TABLE profiles IS 'Canonical store for all individuals (patients and staff). A person''s PII lives here.';
+
+CREATE UNIQUE INDEX idx_profiles_unique_active_phone_per_clinic ON profiles (clinic_id, phone_number) WHERE phone_number IS NOT NULL AND deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_profiles_unique_active_email_per_clinic ON profiles (clinic_id, email) WHERE email IS NOT NULL AND deleted_at IS NULL;
 
 -- The 'employees' table for staff-specific data. One-to-one with profiles.
 CREATE TABLE employees (
@@ -72,6 +75,8 @@ CREATE TABLE employees (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 
+    deleted_at TIMESTAMPTZ,
+
     CONSTRAINT chk_password_for_active_employee CHECK ( (status != 'INVITED' AND password_hash IS NOT NULL) OR (status = 'INVITED') )
 );
 COMMENT ON TABLE employees IS 'Stores employment-specific data for staff members. Has a 1-to-1 relationship with the profiles table.';
@@ -91,10 +96,15 @@ CREATE TABLE roles (
     is_system_role BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    CONSTRAINT uq_roles_clinic_name UNIQUE (clinic_id, name),
+    deleted_at TIMESTAMPTZ,
+
+    -- CONSTRAINT uq_roles_clinic_name UNIQUE (clinic_id, name),
     CONSTRAINT chk_system_role_clinic_id CHECK ( (is_system_role AND clinic_id IS NULL) OR (NOT is_system_role) )
 );
 COMMENT ON TABLE roles IS 'Groups permissions. Can be system-wide or clinic-specific.';
+
+-- HARDENING: Soft-delete aware unique index for roles.
+CREATE UNIQUE INDEX idx_roles_unique_active_name ON roles (clinic_id, name) WHERE deleted_at IS NULL;
 
 CREATE TABLE role_permissions (
     role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
@@ -109,6 +119,67 @@ CREATE TABLE employee_roles (
     PRIMARY KEY (employee_profile_id, role_id)
 );
 COMMENT ON TABLE employee_roles IS 'Assigns roles to employees.';
+
+-- === HARDENING: Foundational Auditing System ===
+CREATE TABLE audit_log (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v7(),
+    clinic_id UUID,
+    user_id UUID,
+    action VARCHAR(50) NOT NULL,
+    table_name TEXT NOT NULL,
+    record_id UUID,
+    old_record JSONB,
+    new_record JSONB,
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+COMMENT ON TABLE audit_log IS 'Stores a detailed audit trail for all sensitive data changes.';
+CREATE INDEX idx_audit_log_timestamp ON audit_log (timestamp);
+CREATE INDEX idx_audit_log_clinic_id ON audit_log (clinic_id);
+CREATE INDEX idx_audit_log_user_id ON audit_log (user_id);
+CREATE INDEX idx_audit_log_table_record ON audit_log (table_name, record_id);
+
+CREATE OR REPLACE FUNCTION log_change()
+RETURNS TRIGGER AS $$
+DECLARE
+    audit_record audit_log;
+    user_payload JSONB;
+BEGIN
+    BEGIN
+        user_payload := current_setting('app.audit_context', true)::jsonb;
+    EXCEPTION WHEN OTHERS THEN
+        user_payload := '{}'::jsonb;
+    END;
+    audit_record = ROW(uuid_generate_v7(),(user_payload->>'clinic_id')::UUID,(user_payload->>'user_id')::UUID,TG_OP,TG_TABLE_NAME,NULL,NULL,NULL,NOW());
+    IF (TG_OP = 'UPDATE') THEN
+        audit_record.record_id := NEW.id;
+        audit_record.old_record := to_jsonb(OLD);
+        audit_record.new_record := to_jsonb(NEW);
+    ELSIF (TG_OP = 'DELETE') THEN
+        audit_record.record_id := OLD.id;
+        audit_record.old_record := to_jsonb(OLD);
+    ELSIF (TG_OP = 'INSERT') THEN
+        audit_record.record_id := NEW.id;
+        audit_record.new_record := to_jsonb(NEW);
+    END IF;
+    INSERT INTO audit_log VALUES (audit_record.*);
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Apply audit trigger to the profiles table.
+CREATE TRIGGER profiles_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON profiles
+FOR EACH ROW EXECUTE FUNCTION log_change();
+
+-- Apply the audit trigger to the 'employees' table to track staff changes.
+CREATE TRIGGER employees_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON employees
+FOR EACH ROW EXECUTE FUNCTION log_change();
+
+-- Apply the audit trigger to the 'roles' table to track permission and role changes.
+CREATE TRIGGER roles_audit_trigger
+AFTER INSERT OR UPDATE OR DELETE ON roles
+FOR EACH ROW EXECUTE FUNCTION log_change();
 
 -- Apply timestamp triggers
 CREATE TRIGGER set_timestamp BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION trigger_set_timestamp();
